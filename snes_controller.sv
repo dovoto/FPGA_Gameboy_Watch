@@ -41,7 +41,7 @@ See the note about wire colours below!
         1        white             Vcc (+5V)           5       white
         2        yellow            CLOCK               2       red
         3        orange            LATCH               3       orange
-        4        red               D0                  4       yellow
+        4        red               DATA                4       yellow
         7        brown             GND (0V)            1       green
 
 		  

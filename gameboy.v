@@ -8,6 +8,7 @@ in this top level module that should be moved.
 
 
 
+
 Author: Jason Rogers
 Contact: jasonrogers@alumni.stanford.edu
 
@@ -107,7 +108,7 @@ module gameboy(
 
 wire rst;
 
-assign rst = KEY[0];  //no deticated reset signal for de10
+assign rst = ~KEY[0];  //no deticated reset signal for de10
 
 //=======================================================
 //  Clock generation
@@ -126,7 +127,6 @@ gb_clocks clocks(
 //  Snes controller module decleration
 //=======================================================
 
-
 wire [15:0] 		snes_buttons;
 
 snes_controller snes_ctl_1(
@@ -140,9 +140,9 @@ snes_controller snes_ctl_1(
 	);
 
 //debug output for snes controller buttons
-HexController hex0 ( .led_segments({HEX2}), .data(snes_buttons[7:4]));
-HexController hex1 ( .led_segments({HEX3}), .data(snes_buttons[3:0]));
-
+HexController hex0 ( .led_segments({HEX0}), .data(~snes_buttons[11:8]));
+HexController hex1 ( .led_segments({HEX1}), .data(~snes_buttons[7:4]));
+HexController hex2 ( .led_segments({HEX2}), .data(~snes_buttons[3:0]));
 
 
 
@@ -151,8 +151,8 @@ HexController hex1 ( .led_segments({HEX3}), .data(snes_buttons[3:0]));
 //  Just playing around with buttons and switches
 //=======================================================
 
-HexController hex2 ( .led_segments({HEX0}), .data(counter[3:0]));
-HexController hex3 ( .led_segments({HEX1}), .data(counter[7:4]));
+//HexController hex2 ( .led_segments({HEX2}), .data(counter[3:0]));
+HexController hex3 ( .led_segments({HEX3}), .data(counter[7:4]));
 HexController hex4 ( .led_segments({HEX4}), .data({SW[7:4]}));
 HexController hex5 ( .led_segments({HEX5}), .data({SW[3:0]}));
 
