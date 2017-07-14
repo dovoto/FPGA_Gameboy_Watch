@@ -63,7 +63,7 @@ module gameboy(
 	output		     [6:0]		HEX2,
 	output		     [6:0]		HEX3,
 	output		     [6:0]		HEX4,
-	output		     [6:0]		HEX5
+	output		     [6:0]		HEX5,
 
 //	//////////// SDRAM //////////
 //	output		    [12:0]		DRAM_ADDR,
@@ -101,19 +101,58 @@ module gameboy(
 //	inout 		          		FPGA_I2C_SDAT,
 //
 //	//////////// GPIO, GPIO connect to GPIO Default //////////
-//	inout 		    [35:0]		GPIO
+	inout 		    [35:0]		GPIO
 );
 
 
+wire rst;
+
+assign rst = KEY[0];  //no deticated reset signal for de10
 
 //=======================================================
-//  REG/WIRE declarations
+//  Clock generation
 //=======================================================
 
-HexController hex0 ( .led_segments({HEX0}), .data(counter[3:0]));
-HexController hex1 ( .led_segments({HEX1}), .data(counter[7:4]));
-HexController hex2 ( .led_segments({HEX2}), .data({4'h2}));
-HexController hex3 ( .led_segments({HEX3}), .data({4'h3}));
+wire cpu_clock;
+
+gb_clocks clocks(
+		.refclk(CLOCK_50),   
+		.rst(rst),      
+		.outclk_0(cpu_clock) //4mhz ish clock	
+	);
+
+
+//=======================================================
+//  Snes controller module decleration
+//=======================================================
+
+
+wire [15:0] 		snes_buttons;
+
+snes_controller snes_ctl_1(
+   .clock(cpu_clock),              
+	.rst(rst),            
+	.snes_buttons(snes_buttons),   
+	.snes_data (GPIO[0]),
+   .snes_latch (GPIO[1]),
+	.snes_clock (GPIO[2])
+	
+	);
+
+//debug output for snes controller buttons
+HexController hex0 ( .led_segments({HEX2}), .data(snes_buttons[7:4]));
+HexController hex1 ( .led_segments({HEX3}), .data(snes_buttons[3:0]));
+
+
+
+
+
+//=======================================================
+//  Just playing around with buttons and switches
+//=======================================================
+
+HexController hex2 ( .led_segments({HEX0}), .data(counter[3:0]));
+HexController hex3 ( .led_segments({HEX1}), .data(counter[7:4]));
 HexController hex4 ( .led_segments({HEX4}), .data({SW[7:4]}));
 HexController hex5 ( .led_segments({HEX5}), .data({SW[3:0]}));
 
@@ -121,12 +160,7 @@ reg [7:0] counter;
 reg up_state;
 reg down_state;
 
-//=======================================================
-//  Structural coding
-//=======================================================
-
 assign LEDR = SW;
-
 
 always @(posedge CLOCK_50)
 begin
