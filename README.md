@@ -3,6 +3,10 @@ Full gameboy and gameboy color Verilog Implenentation
 
 This project is at about 80% complete.  Most gameboy roms work, gameboy color features are 80% implemented.
 
+
+![overview](useful_docs/overview.jpg)
+
+
 Remaining (besides refactoring and checking in modules)
   Debugging 
   Gameboy color tile flips for background tiles
