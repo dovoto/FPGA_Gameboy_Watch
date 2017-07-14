@@ -128,7 +128,8 @@ wire cpu_clock;
 gb_clocks clocks(
 		.refclk(CLOCK_50),   
 		.rst(rst),      
-		.outclk_0(cpu_clock) //4mhz ish clock	
+		.outclk_0(cpu_clock), //4mhz ish clock	
+		.outclk_1(uart_clock) 
 	);
 
 
@@ -155,7 +156,7 @@ HexController hex2 ( .led_segments({HEX2}), .data(~snes_buttons[3:0]));
 
 
 //=======================================================
-//  Snes controller module decleration
+// Gameboy CPU instantiation
 //=======================================================
 wire [15:0] cpu_addr_bus;
 wire [7:0] cpu_data_bus_out;
@@ -169,7 +170,6 @@ wire button_pressed = 0;
 wire cgb = 0;
 wire initialized;
 wire speed_double;
-wire gdma_happening;
 
 gb_cpu cpu(
 .rst(rst),
@@ -185,6 +185,99 @@ gb_cpu cpu(
 .initialized(initialized),
 .gdma_happening(gdma_happening),
 .speed_double(speed_double));
+
+
+//=======================================================
+// Gameboy memory controller instantiation
+//=======================================================
+
+wire [7:0] mem_controller_data_out;
+wire [7:0] dma_wr_addr;
+wire [7:0] dma_data;
+wire dma_we;
+wire dma_happening;
+
+wire [15:0] gdma_wr_addr;
+wire [7:0] gdma_data;
+wire gdma_we;
+wire gdma_happening;
+
+wire unloaded;
+wire gb_rom;
+
+gb_memory_controller mem_control(
+.rst(rst), 
+.clock(memory_clock), 
+.addr_bus(cpu_addr_bus), 
+.data_in(cpu_data_bus_out), 
+.data_out(mem_controller_data_out), 
+.we(cpu_we),
+.rd(cpu_re), 
+.cgb(cgb), 
+.initialized(initialized),
+.dma_wr_addr(dma_wr_addr),
+.dma_we(dma_we),
+.dma_happening(dma_happening),
+.dma_data(dma_data),
+.gdma_wr_addr(gdma_wr_addr),
+.gdma_we(gdma_we),
+.gdma_happening(gdma_happening),
+.gdma_data(gdma_data),
+.unloaded(unloaded),
+.gb_rom(gb_rom),
+.uart_addr(uart_load_addr),
+.uart_data_in(uart_data_rcv),
+.uart_we(uart_load_we),
+.uart_load(uart_loading));
+
+
+//=======================================================
+// UART for rom loading and IO
+//=======================================================
+
+wire uart_clk;
+wire uart_data_rdy;
+wire [7:0] uart_data_rcv;
+wire uart_rst_req;
+wire [27:0] uart_load_addr;
+wire uart_load_we;
+wire uart_loading;
+wire uart_tx;
+wire uart_rx;
+
+assign GPIO[3] = uart_tx;
+assign uart_rx = GPIO[4];
+
+uart load_uart(
+.rst(rst),
+.clk(uart_clk), 
+.data_clk(cpu_clock), 
+.send(cpu_we && cpu_addr_bus == 16'hFF01),
+.data_send(cpu_data_bus_out), 
+.data_rcv(uart_data_rcv), 
+.rdy(uart_data_rdy),
+.ack(cpu_we && cpu_addr_bus == 16'hFF08), 
+.tx(uart_tx), 
+.rx(uart_rx),
+.rst_req(uart_rst_req),
+.load_addr(uart_load_addr),
+.load_we(uart_load_we),
+.loading(uart_loading));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //=======================================================
 //  Just playing around with buttons and switches
