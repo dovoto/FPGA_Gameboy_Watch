@@ -70,7 +70,7 @@ SOFTWARE.
 
 module gb_cpu 
 //---------------------------------------
-(rst, clock, addr_bus_out, data_bus_in, data_bus_out, we, re, PC, irq, button_pressed, cgb, initialized, gdma_happening, speed_double);
+(rst, clock, addr_bus_out, data_bus_in, data_bus_out, we, re, PC, irq, cgb, initialized, gdma_happening, speed_double);
 
 input rst;
 input clock;
@@ -82,7 +82,6 @@ output re;
 output [15:0] PC;
 input [7:0] irq;
 input cgb;
-input button_pressed;
 output initialized;
 input gdma_happening;
 output speed_double;
