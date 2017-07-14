@@ -7,6 +7,15 @@ Contrary to good design and practice there is some logic and fucntionality
 in this top level module that should be moved.
 
 
+GPIO pinout for DE10 Standard:
+
+       FPGA
+
+34 32 30 28 26 3.3v 24 22 20 18 16 14 12 10 5.5v 08 06 04 02 00
+35 33 31 29 27 GND  25 23 21 19 17 15 13 11 GND  09 07 05 03 01 
+
+
+       HSMC Connector
 
 
 Author: Jason Rogers
@@ -145,7 +154,37 @@ HexController hex1 ( .led_segments({HEX1}), .data(~snes_buttons[7:4]));
 HexController hex2 ( .led_segments({HEX2}), .data(~snes_buttons[3:0]));
 
 
+//=======================================================
+//  Snes controller module decleration
+//=======================================================
+wire [15:0] cpu_addr_bus;
+wire [7:0] cpu_data_bus_out;
+wire [7:0] cpu_data_bus_in;
+wire cpu_we;
+wire cpu_re;
+wire [15:0] cpu_pc;
 
+reg [7:0] irq;
+wire button_pressed = 0;
+wire cgb = 0;
+wire initialized;
+wire speed_double;
+wire gdma_happening;
+
+gb_cpu cpu(
+.rst(rst),
+.clock(cpu_clock), 
+.addr_bus_out(cpu_addr_bus), 
+.data_bus_in(cpu_data_bus_in), 
+.data_bus_out(cpu_data_bus_out), 
+.we(cpu_we), 
+.re(cpu_re), 
+.PC(cpu_pc), 
+.irq(irq), 
+.cgb(cgb),
+.initialized(initialized),
+.gdma_happening(gdma_happening),
+.speed_double(speed_double));
 
 //=======================================================
 //  Just playing around with buttons and switches
