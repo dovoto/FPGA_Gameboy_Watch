@@ -12,5 +12,9 @@ Remaining (besides refactoring and checking in modules)
   Gameboy color tile flips for background tiles
   External ram support for larger than 256K roms (512k roms work but not enough internal bram from 512k rom AND gameboy color features)
 
+ ![video1](https://www.youtube.com/watch?v=Pr7vuAg85WQ&t=10s)
+ 
+ ![video1](https://www.youtube.com/watch?v=uc7wt_IBnak)
+ 
 This project was started a long time ago...and my coding style and abilities have changed quite a bit in that time...this does make things a bit inconsistant at times and I am slowly refactoring that.  
   
