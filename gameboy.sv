@@ -89,14 +89,14 @@ module gameboy(
 //	output		          		DRAM_WE_N,
 //
 //	//////////// VGA //////////
-//	output		          		VGA_BLANK_N,
-//	output		     [7:0]		VGA_B,
-//	output		          		VGA_CLK,
-//	output		     [7:0]		VGA_G,
-//	output		          		VGA_HS,
-//	output		     [7:0]		VGA_R,
-//	output		          		VGA_SYNC_N,
-//	output		          		VGA_VS,
+	output		          		VGA_BLANK_N,
+	output		     [7:0]		VGA_B,
+	output		          		VGA_CLK,
+	output		     [7:0]		VGA_G,
+	output		          		VGA_HS,
+	output		     [7:0]		VGA_R,
+	output		          		VGA_SYNC_N,
+	output		          		VGA_VS,
 //
 //	//////////// Audio //////////
 //	input 		          		AUD_ADCDAT,
@@ -119,19 +119,48 @@ wire rst;
 
 assign rst = ~KEY[0];  //no deticated reset signal for de10
 
+
+wire gbc = SW[0];  //flag to start up in gbc mode
+
 //=======================================================
 //  Clock generation
 //=======================================================
 
 wire cpu_clock;
+wire uart_clock;
+wire vga_clock;
+wire mipi_clock;
+wire memory_clock;
+
+assign memory_clock = cpu_clock;
 
 gb_clocks clocks(
 		.refclk(CLOCK_50),   
 		.rst(rst),      
 		.outclk_0(cpu_clock), //4mhz ish clock	
-		.outclk_1(uart_clock) 
+		.outclk_1(uart_clock),
+		.outclk_2(vga_clock),
+		.outclk_3(mipi_clock)
 	);
 
+	
+//=======================================================
+//  Some top level register stuff
+//=======================================================
+wire [7:0] cpu_data_bus_in;
+
+always_comb
+begin
+
+	casex (cpu_addr_bus)
+		//	7'h01: cpu_data_bus_in = serial_xfr_complete ? 8'hff : Reg_SB_ff01 ;
+			16'hff08: cpu_data_bus_in = {7'b0,uart_data_rdy};
+			16'hff09: cpu_data_bus_in = uart_data_rcv;
+				
+		//	7'h1X, 7'h2X, 7'h3X: cpu_data_bus_in = sound_data_bus_out;
+			default: cpu_data_bus_in <= video_controller_data_out;
+	endcase	
+end
 
 //=======================================================
 //  Snes controller module decleration
@@ -160,13 +189,11 @@ HexController hex2 ( .led_segments({HEX2}), .data(~snes_buttons[3:0]));
 //=======================================================
 wire [15:0] cpu_addr_bus;
 wire [7:0] cpu_data_bus_out;
-wire [7:0] cpu_data_bus_in;
 wire cpu_we;
 wire cpu_re;
 wire [15:0] cpu_pc;
 
 reg [7:0] irq;
-wire button_pressed = 0;
 wire cgb = 0;
 wire initialized;
 wire speed_double;
@@ -180,12 +207,11 @@ gb_cpu cpu(
 .we(cpu_we), 
 .re(cpu_re), 
 .PC(cpu_pc), 
-.irq(irq), 
+.irq(irq | vga_irq), 
 .cgb(cgb),
 .initialized(initialized),
 .gdma_happening(gdma_happening),
 .speed_double(speed_double));
-
 
 //=======================================================
 // Gameboy memory controller instantiation
@@ -207,7 +233,7 @@ wire gb_rom;
 
 gb_memory_controller mem_control(
 .rst(rst), 
-.clock(memory_clock), 
+.clock(cpu_clock), 
 .addr_bus(cpu_addr_bus), 
 .data_in(cpu_data_bus_out), 
 .data_out(mem_controller_data_out), 
@@ -229,6 +255,70 @@ gb_memory_controller mem_control(
 .uart_data_in(uart_data_rcv),
 .uart_we(uart_load_we),
 .uart_load(uart_loading));
+
+
+
+//=======================================================
+// Video Hardware
+//=======================================================
+
+
+assign VGA_CLK = vga_clock;
+
+wire [7:0] video_controller_data_out;
+wire [7:0] vga_irq;
+
+
+gb_video video_controller(
+.rst(rst),
+.gbc(gbc),
+.irq(vga_irq),
+.initialized(initialized),
+.gb_rom(gb_rom),
+.unloaded(unloaded),
+
+.vga_clock(vga_clock), //pixel clock for 1280x1024 vga clock
+.pixel_clock(cpu_clock), //4mhz pixel clock
+.cpu_clock(cpu_clock), //4 or 8 mhz (depending on speed mode in gbc)
+.memory_clock(cpu_clock),
+.mipi_clock(mipi_clock),  //20mhz clock to drive the mipi display
+
+.cpu_addr_bus(cpu_addr_bus),
+.data_bus_out(video_controller_data_out),
+.data_bus_in(cpu_data_bus_out),
+.memory_controller_data_in(mem_controller_data_out),
+.cpu_we(cpu_we),
+
+.dma_wr_addr(dma_wr_addr),
+.dma_we(dma_we),
+.dma_happening(dma_happening),
+.dma_data(dma_data),
+.gdma_wr_addr(gdma_wr_addr),
+.gdma_we(gdma_we),
+.gdma_happening(gdma_happening),
+.gdma_data(gdma_data),
+
+.vga_vs(VGA_VS),  //vga sync pulses
+.vga_hs(VGA_HS),
+.vga_hblank(VGA_SYNC_N),
+.vga_vblank(VGA_BLANK_N),
+.vga_red(VGA_R),
+.vga_green(VGA_G),
+.vga_blue(VGA_B)
+
+
+//.mipi_pwm(), 
+//.mipi_rgb(), 
+//.mipi_cm(),
+//.mipi_rd(), 
+//.mipi_cs(), 
+//.mipi_shut(), 
+//.mipi_wr(), 
+//.mipi_dc(),
+//.mipi_rst(),
+//.mipi_vddio_ctrl(),
+//.mipi_scale()  
+);
 
 
 //=======================================================
