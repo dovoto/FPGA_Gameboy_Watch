@@ -25,3 +25,4 @@ roms/gbc_bios.bin
 roms/gbc_bios.hex
 roms/jbios.bin
 roms/jbios.hex
+serial_loader_c_sharp/.vs/SimpleSerial/v15/.suo
