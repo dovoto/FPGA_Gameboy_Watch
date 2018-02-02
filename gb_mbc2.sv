@@ -52,7 +52,7 @@ input [7:0] ram_size;
 output ram_enabled;
 input cgb;
 
-reg [3:0] rom_bank = 5'b0;
+reg [3:0] rom_bank = 4'b0;
 reg [23:0] addr_bus_out;
 reg [7:0] data_out;
 reg ram_enabled;
@@ -78,7 +78,7 @@ end
 always @(posedge clock)
 begin
 	if(rst) begin
-		rom_bank = 9'b0;
+		rom_bank = 4'b0;
 		ram_enable = 1'b0;
 	end else if(we_in) begin
 		case(addr_bus_in[15:12])

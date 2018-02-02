@@ -1,110 +1,739 @@
+//---------------------------------------
+//very simple single mode (640x480x60hz) vga
+//generator appropriately named: ledblink
 
-/*
+module ledblink 
+//---------------------------------------
+(led, button, switches, clock_50mhz, 
+r, g, b, vs, hs, vblank, hblank, clock_vga, 
+i2c_sclk, i2c_sdata, dac_mute, dac_mclk, dac_LR_clk, dac_data, dac_bclk, 
+rst_button,
+snes_clk, snes_data, snes_latch,
+uart_tx, uart_rx,
+mipi_pwm, mipi_rgb, mipi_cm, mipi_rd, mipi_cs, mipi_shut, mipi_wr, mipi_dc, mipi_rst, mipi_vddio_ctrl  
+);            
 
-Module: Gameboy/Gameboy Color video hardware module
-
-This thing is mostly a great big mess of hacky and magical things...slowly
-refactoring.
-
-
-85% complete
-
-Features missing: Background tile flipping in gb color mode.
-
-TODO: Refactor timer stuff into a seperate module
-
-Author: Jason Rogers
-Contact: jasonrogers@alumni.stanford.edu
-
-
-LICENSE
-
-Copyright (c) 2017 Jason Rogers
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-Attribution is given to the author(s) of the software where such attribution is 
-convenient.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-*/
+output [3:0] 	led;
+output [7:0]	r;
+output [7:0]	g;
+output [7:0]	b;
+output 			hs;
+output 			vs;
+output 			hblank;
+output 			vblank;
+output			clock_vga;
+output 			snes_clk;
+output			snes_latch;
+input			snes_data;
 
 
+output uart_tx;
+input uart_rx;
 
-module gb_video(
-input rst,
-input gbc,
+input [3:0] 	button; 
+input [3:0]    switches;
+input 			clock_50mhz;
+input 			rst_button;
 
-input vga_clock, //108mhz pixel clock for 1280x1024 vga clock
-input pixel_clock, //4mhz pixel clock
-input cpu_clock, //4 or 8 mhz (depending on speed mode in gbc)
-input memory_clock,
-input mipi_clock,  //20mhz clock to drive the mipi display
+output i2c_sclk;
+inout i2c_sdata;
+output dac_mute;
+output dac_mclk;
+output dac_bclk;
+output dac_LR_clk;
+output dac_data;
 
-input [15:0] cpu_addr_bus,
-output [7:0]  data_bus_out,
-input[7:0]  data_bus_in, //todo: rename...should just be data in and data out not cpu and memory controller
-input [7:0]  memory_controller_data_in,
-input        cpu_we,
+output mipi_pwm; 
+output [7:0] mipi_rgb; 
+output mipi_cm;
+output mipi_rd; 
+output mipi_cs; 
+output mipi_shut; 
+output mipi_wr; 
+output mipi_dc;
+output mipi_rst;
+output mipi_vddio_ctrl;  
 
-output [7:0] irq,
-input initialized,
-input gb_rom,
-input unloaded,
+reg [15:0] 		snes_buttons;
+reg [1:0]		snes_state;
+reg [4:0] 		snes_ctr;
+reg [15:0] 		snes_shift_reg;
 
-input gdma_we,
-input [15:0] gdma_wr_addr,
-input gdma_happening,
-input [7:0] gdma_data,
+reg [3:0] 		led;
+wire 				clock_50mhz;
 
-input dma_happening,
-input dma_we,
-input [15:0] dma_wr_addr,
-input [7:0] dma_data,
+reg [7:0]		r;
+reg [7:0]		g;
+reg [7:0]		b;
+reg 				hs;
+reg				vs;
+wire 				hblank;
+wire				vblank;
+wire				clock_vga;
 
-output vga_vs, 
-output vga_hs, //vga sync pulses
-output [7:0] vga_red,
-output [7:0] vga_green,
-output [7:0] vga_blue,
-output vga_hblank,
-output vga_vblank,
+wire i2c_sclk;
+wire i2c_sdata;
+wire dac_mute;
+wire dac_mclk;
+wire dac_bclk;
+wire dac_LR_clk;
+wire dac_data;
 
-output mipi_pwm, 
-output [7:0] mipi_rgb, 
-output mipi_cm,
-output mipi_rd, 
-output mipi_cs, 
-output mipi_shut, 
-output mipi_wr, 
-output mipi_dc,
-output mipi_rst,
-output mipi_vddio_ctrl,
-input  mipi_scale  
+
+reg gbc;
+
+//----------------------------------------
+
+
+wire				clock_20mhz;
+wire				clock_108;
+wire				pixel_clock;
+wire 				memory_clock;
+reg				half_clock;
+wire 				full_clock;
+wire 				cpu_clock;
+wire 				snes_clock;
+
+reg 				hs_;
+reg				vs_;
+//vga pixel counters
+wire [12:0] x;
+wire [12:0] y;
+
+wire _vblank;
+wire _hblank;
+wire locked;
+
+wire reset;
+wire rst;
+
+//-------------------------------------------
+//
+// clock logic
+//
+//-------------------------------------------
+
+assign cpu_clock = full_clock;//speed_double ? full_clock : half_clock;
+assign pixel_clock = full_clock;
+assign memory_clock = full_clock;
+
+always @(posedge full_clock)
+begin
+	half_clock = ~half_clock;
+end
+
+//-------------------------------------------
+//
+// uart
+//
+//-------------------------------------------
+
+wire uart_clk;
+wire uart_data_rdy;
+wire [7:0] uart_data_rcv;
+wire uart_rst_req;
+wire [27:0] uart_load_addr;
+wire uart_load_we;
+wire uart_loading;
+
+uart load_uart(
+.rst(rst),
+.clk(uart_clk), 
+.data_clk(cpu_clock), 
+.send(cpu_we && cpu_addr_bus == 16'hFF01),
+.data_send(cpu_data_bus_out), 
+.data_rcv(uart_data_rcv), 
+.rdy(uart_data_rdy),
+.ack(cpu_we && cpu_addr_bus == 16'hFF08), 
+.tx(uart_tx), 
+.rx(uart_rx),
+.rst_req(uart_rst_req),
+.load_addr(uart_load_addr),
+.load_we(uart_load_we),
+.loading(uart_loading));
+
+//-------------------------------------------
+//
+//	Frame buffer 
+//
+//-------------------------------------------
+
+
+reg [1:0] fb_data_in;
+reg [15:0] fb_data_out;
+reg [15:0] fb_write_addr;
+reg [15:0] fb_read_addr;
+reg fb_we;
+
+frame_buffer fb(
+	mipi_color,
+	fb_read_addr,
+	clock_vga,
+	fb_write_addr,
+	pixel_clock,
+	fb_we,
+	fb_data_out);
+	
+
+
+//-------------------------------------------
+//
+//	Mipi driver
+//
+//-------------------------------------------
+
+reg [7:0] mipi_pwm_duty;
+reg [2:0] mipi_state;
+reg [7:0] mipi_data_out;
+reg [7:0] mipi_control_out;
+reg [8:0] mipi_x;
+reg [2:0] mipi_wr_state;
+reg [15:0] mipi_color;
+reg [1:0] mipi_x_toggle; //scalling
+reg [2:0] mipi_y_toggle; //scalling
+reg  mipi_line_toggle;  //scalling
+reg [7:0] mipi_index;
+
+reg [7:0] mipi_cmd;
+reg [7:0] mipi_y;
+
+reg [15:0] mipi_data_out1;
+reg [15:0] mipi_data_out2;
+
+reg [7:0] mipi_line_buffer_wr_addr;
+
+mipi_line_buffer mipi_line_buffer1(
+	.data({mipi_color[4:0], mipi_color[9:5], 1'b0, mipi_color[14:10]}),
+	.rdaddress(mipi_index),
+	.rdclock(clock_20mhz),
+	.wraddress(mipi_line_buffer_wr_addr),
+	.wrclock(pixel_clock),
+	.wren(fb_we & mipi_line_toggle),
+	.q(mipi_data_out1)
+	);
+mipi_line_buffer mipi_line_buffer2(
+	.data({mipi_color[4:0], mipi_color[9:5], 1'b0, mipi_color[14:10]}),
+	.rdaddress(mipi_index),
+	.rdclock(clock_20mhz),
+	.wraddress(mipi_line_buffer_wr_addr),
+	.wrclock(pixel_clock),
+	.wren(fb_we & ~mipi_line_toggle),
+	.q(mipi_data_out2)
+	);
+
+always @(posedge cpu_clock)
+begin
+	if(rst) begin
+		mipi_pwm_duty = 8'h3f;
+	end else begin
+		if(cpu_we && cpu_addr_bus == 16'hff84) begin
+			mipi_data_out = cpu_data_bus_out;
+		end else if (cpu_we && cpu_addr_bus == 16'hff85 && unloaded) begin
+			mipi_control_out = cpu_data_bus_out;
+		end
+		
+		mipi_pwm_duty = {mipi_pwm_duty[0],mipi_pwm_duty[7:1]};
+		mipi_pwm =  mipi_pwm_duty[7];
+	end
+end
+
+always @(posedge clock_20mhz)
+begin
+	if(rst) begin
+		mipi_state = 0;
+		mipi_x = 0;
+		mipi_wr_state = 0;
+		mipi_line_toggle = 0;
+		mipi_index = 2;
+		mipi_y = 0;
+		mipi_cmd = 8'h0;
+	end else begin
+
+		
+		
+		case (mipi_state)
+			0: begin  //resetting
+	
+				{mipi_rd, mipi_wr, mipi_cs, mipi_dc, mipi_rst, mipi_cm, mipi_shut, mipi_vddio_ctrl} = {mipi_control_out[7:3], 1'b0, 1'b0, 1'b1};
+				mipi_rgb = mipi_data_out;
+				mipi_state = (~unloaded && (pixel_y != 8'd145));
+			end
+			1: begin
+				if(~Reg_LCDcontrol_ff40[7] && mipi_cmd != 8'h23) begin
+					mipi_cmd = 8'h23;
+					mipi_state = 3'd2;	
+				end else if (mipi_cmd == 8'h23 ) begin
+					mipi_cmd = 8'h13;
+					mipi_state = 3'd2;	
+				end else begin
+				
+					mipi_state = (render_mode == 2'd0 ? 3'd2 : 3'd1) ;
+					
+					mipi_index = 2;
+					mipi_x = 9'd0;
+					mipi_x_toggle = 0;
+										
+					mipi_cmd = (pixel_y == 9'd0 ? 8'h2C : 8'h3C);
+					
+					if(render_mode == 2'd0) begin
+						mipi_line_toggle = mipi_line_toggle ^ 1'b1;
+					end
+				end
+				
+				mipi_wr_state = 0;
+						
+				
+			end
+
+			2:begin  //write start byte
+				mipi_y = mipi_y + 1'b1;
+				
+				case(mipi_wr_state)
+					0: begin
+						mipi_rgb = mipi_cmd;
+						mipi_wr = 1;
+						mipi_cs = 1;
+						mipi_dc = 0;
+						mipi_rd = 1;
+					end
+					1: begin
+						mipi_wr = 1;
+						mipi_cs = 0;
+						mipi_dc = 0;
+						mipi_rd = 1;
+					end
+					2: begin
+						mipi_wr = 0;
+						mipi_cs = 0;
+						mipi_dc = 0;
+						mipi_rd = 1;
+					end
+					3: begin
+						mipi_wr = 1;
+						mipi_cs = 1;
+						mipi_dc = 1;
+						mipi_rd = 1;
+					end
+					4: begin
+						mipi_wr = 1;
+						mipi_cs = 0;
+						mipi_dc = 1;
+						mipi_rd = 1;
+					end
+					default: begin end
+				endcase 
+				
+					mipi_wr_state  = mipi_wr_state + 1'b1;
+					
+					if(~|mipi_wr_state) begin
+						mipi_state = (mipi_cmd == 8'd23 || mipi_cmd == 8'd13) ? 3'd1 : 3'd3;
+					end
+					
+					
+					mipi_x = 0;
+					mipi_index = 2;
+	
+			end
+			3: begin
+			
+		
+   			case(mipi_wr_state[1:0])
+					0: begin
+						mipi_rgb =  mipi_line_toggle ? mipi_data_out2[7:0] : mipi_data_out1[7:0];
+						mipi_wr = 0;
+						mipi_cs = 0;
+						mipi_dc = 1;
+						mipi_rd = 1;
+	
+					end
+					1: begin
+						mipi_wr = 1;
+						mipi_cs = 0;
+						mipi_dc = 1;
+						mipi_rd = 1;
+					
+					end
+					2: begin
+						mipi_rgb = mipi_line_toggle ? mipi_data_out2[15:8] : mipi_data_out1[15:8];
+						mipi_wr = 0;
+						mipi_cs = 0;
+						mipi_dc = 1;
+						mipi_rd = 1;
+					
+				   	mipi_x = mipi_x + 1'b1;
+						
+						if(mipi_x_toggle != 2'd3 || ~switches[2]) begin
+						
+							mipi_index = mipi_index + 1'b1;
+						end else begin
+							mipi_x_toggle = 0;
+						end
+						
+						mipi_x_toggle = mipi_x_toggle + 1'b1;	
+					end
+					3: begin
+						mipi_wr = 1;
+						mipi_cs = 0;
+						mipi_dc = 1;
+						mipi_rd = 1;
+						
+					end
+					default: begin end
+				endcase 
+									
+				mipi_wr_state = mipi_wr_state + 1'b1;
+				
+				if(mipi_x > 240) begin
+					mipi_x = 0;
+					mipi_index = 2;
+					mipi_x_toggle = 0;
+					mipi_wr_state = 0;
+					
+					if(((mipi_y_toggle != 3'd3 && mipi_y_toggle != 3'd5) |  ~switches[2])) begin
+						mipi_state = 3'd4;							
+					end else begin
+						mipi_state = 3'd2;
+						mipi_y_toggle = mipi_y_toggle == 3'd5 ? 3'd0 : mipi_y_toggle;
+					end
+					
+					mipi_y_toggle = mipi_y_toggle + 1'b1;
+
+				end
+	
+		end
+		4: begin
+			mipi_state = render_mode == 2'd0 ? 3'd4 : 3'd1;
+		end
+
+		default: 
+		
+			begin 
+				mipi_state = 2'b01;
+			end
+		
+		endcase
+		
+		if(~Reg_LCDcontrol_ff40[7]) begin
+			mipi_state = mipi_state ? 3'd1 : 3'd0;
+		end
+		
+	end
+	
+end
+
+//-------------------------------------------
+//
+// snes controller
+//
+//-------------------------------------------
+
+reg [12:0] snes_counter;
+
+always @(posedge cpu_clock)
+begin
+	if(rst) begin
+		snes_state = 0;
+		snes_latch = 0;
+		snes_ctr = 0;
+		snes_buttons = 0;
+		snes_shift_reg = 0;
+	end else begin
+		
+		snes_clk = ~(~|snes_counter[3:0] & snes_state[1:0]==2);
+		
+		if(~|snes_counter[3:0]) begin
+			case (snes_state)
+			
+			0: begin
+				snes_latch = 0;
+				snes_state = ~|snes_counter ? 2'b1 : 2'b0;
+				
+			end
+			1: begin
+				snes_latch = 1;
+				snes_state = 2;
+				snes_shift_reg = 0;
+				snes_ctr = 0;
+				
+			end
+			2: begin
+				snes_shift_reg = {snes_data, snes_shift_reg[15:1]};
+				snes_latch = 0;
+				snes_ctr = snes_ctr + 1'b1;
+				if(snes_ctr == 16) begin
+					snes_buttons = snes_shift_reg;
+					snes_state = 0;
+				end
+			end
+			default: snes_state = 0;
+			
+			endcase
+		end
+		snes_counter = snes_counter + 1'b1;
+		
+		led = snes_buttons[8:5] | { snes_buttons[4:2],  snes_buttons[0]};
+		
+		//led = snes_buttons[12:9] ^ {3'b0, ^fb_data_out};
+		
+	end
+	
+
+	
+	Reg_buttons_ff00[0] = ~Reg_buttons_ff00[5] & snes_buttons[8] | ~Reg_buttons_ff00[4] & snes_buttons[7];
+	Reg_buttons_ff00[1] = ~Reg_buttons_ff00[5] & snes_buttons[0] | ~Reg_buttons_ff00[4] & snes_buttons[6];
+	Reg_buttons_ff00[2] = ~Reg_buttons_ff00[5] & snes_buttons[2] | ~Reg_buttons_ff00[4] & snes_buttons[4];
+	Reg_buttons_ff00[3] = ~Reg_buttons_ff00[5] & snes_buttons[3] | ~Reg_buttons_ff00[4] & snes_buttons[5];
+	
+end
+
+//-------------------------------------------
+//
+// sound hardware
+//
+//-------------------------------------------
+	
+gb_sound_hardware gbsh(
+    .clk (pixel_clock), //the pixel clock
+	 .rst (rst),
+     
+	 .left_out (sound_left_out),  
+	 .right_out (sound_right_out),
+	 .sound_enabled (sound_enabled),
+	 
+	 .addr_bus (cpu_addr_bus) ,
+	 .data_bus_in (cpu_data_bus_out),
+	 .data_bus_out (sound_data_bus_out),
+	 .we (cpu_we),
+	 .re (cpu_re),
+	 .channel_enables (switches)
 );
 
-//reg [7:0]		vga_red;
-//reg [7:0]		vga_green;
-//reg [7:0]		vga_blue;
-//reg 				vga_vs;
-//reg				vga_hs;
-//reg			   vga_vblank;
-//reg 			   vga_hblank;
+wire sound_enabled;
+wire [15:0] sound_left_out;
+wire [15:0] sound_right_out;
+
+wire [7:0] sound_data_bus_out;
+
+reg [7:0] sound_44khz_divider;
+reg [5:0] sound_left_count;
+reg [5:0] sound_right_count;
+
+reg [15:0] sound_shifter;
+
+wire sound_44khz_clk;
+
+always @(posedge dac_mclk) 
+begin
+	sound_44khz_divider = sound_44khz_divider + 1'b1;
+end
+
+always_comb 
+begin
+	sound_44khz_clk = sound_44khz_divider[7];
+	dac_LR_clk <= sound_44khz_clk;
+end
+
+always @(posedge dac_bclk)
+begin
+	if (rst) begin
+		sound_left_count = 6'b0;
+		sound_right_count = 6'b0;
+	end else if (~i2c_init) begin
+		//do something here?
+	end else if(sound_44khz_clk) begin
+	   sound_right_count = 6'b0;
+		
+		if(~|sound_left_count) begin
+			sound_shifter = sound_left_out;
+		end
+		
+		if(~sound_left_count[5]) begin
+			sound_shifter = {sound_shifter[14:0], 1'b0};
+			sound_left_count = sound_left_count + 1'b1;
+		end
+	end else begin
+		sound_left_count = 6'b0;
+		
+		if(~|sound_right_count) begin
+			sound_shifter = sound_right_out;
+		end
+		
+		if(~sound_right_count[5]) begin
+			sound_shifter = {sound_shifter[14:0], 1'b0};
+			sound_right_count = sound_right_count + 1'b1;
+		end
+	end
+	dac_data = sound_shifter[15];
+	
+end
+//-------------------------------------------
+//
+// I2C for audio DAC
+//
+//-------------------------------------------
+
+reg start_i2c;
+reg done_i2c;
+wire ack_i2c;
+wire [15:0] lut_data;
+reg [3:0] lut_index = 0;
+reg [7:0] dac_i2c_addr = 8'h34;
+reg sending_i2c;
+
+wire i2c_init;
+
+i2c_send i2c_dac(
+    .clk (pixel_clock), //the clock, max 526kHz * 8 for the dac
+	 .rst (rst),
+    .sclk (i2c_sclk), //i2c sclk
+    .sdat (i2c_sdata), //i2c sdat
+    
+    .start (start_i2c) , //starts the send/recieve 
+    .done (done_i2c), //set to high when transfer complete
+    .ack (ack_i2c), //will be high if all three acks are correct
+
+    .data ({dac_i2c_addr, lut_data}) //data to be sent
+);
+
+always_comb begin
+	 dac_mute <= 1'b1;
+	 i2c_init <= lut_index == 4'hb ? 1'b1 : 1'b0;
+	 
+    case (lut_index)
+        4'h0: lut_data <= 16'h0c13; // power on everything except out
+        4'h1: lut_data <= 16'h0017; // left input
+        4'h2: lut_data <= 16'h0217; // right input
+        4'h3: lut_data <= 16'h045c; // left output
+        4'h4: lut_data <= 16'h065c; // right output
+        4'h5: lut_data <= 16'h08d4; // analog path
+        4'h6: lut_data <= 16'h0a04; // digital path
+        4'h7: lut_data <= 16'h0e01; // digital IF
+        4'h8: lut_data <= 16'h1020; // sampling rate
+        4'h9: lut_data <= 16'h0c03; // power on everything
+        4'ha: lut_data <= 16'h1201; // activate
+        default: lut_data <= 16'h0000;
+    endcase
+end
+
+always @(posedge pixel_clock) 
+begin
+	if(rst) begin
+		lut_index = 1'b0;
+		sending_i2c = 1'b0;
+		start_i2c = 1'b0;
+		dac_i2c_addr = 8'h34;
+	end else if (lut_index != 4'hb) begin
+		if(~sending_i2c) begin
+			sending_i2c = 1'b1;
+			start_i2c = 1'b1;
+		end else if (done_i2c) begin
+			lut_index = lut_index + 1'b1;
+			start_i2c = 1'b0;
+			sending_i2c = 1'b0;
+		end
+	end
+end
+
+//-------------------------------------------
+//
+// CPU 
+//
+//-------------------------------------------
+wire [15:0] cpu_addr_bus;
+wire [7:0] cpu_data_bus_out;
+wire [7:0] cpu_data_bus_in;
+wire cpu_we;
+wire cpu_re;
+wire [15:0] cpu_pc;
+
+reg [7:0] irq;
+wire button_pressed = 0;
+wire cgb = 0;
+wire initialized;
+wire speed_double;
+
+gb_cpu cpu(
+.rst(rst),
+.clock(cpu_clock), 
+.addr_bus_out(cpu_addr_bus), 
+.data_bus_in(cpu_data_bus_in), 
+.data_bus_out(cpu_data_bus_out), 
+.we(cpu_we), 
+.re(cpu_re), 
+.PC(cpu_pc), 
+.irq(irq), 
+.button_pressed(button_pressed), 
+.cgb(cgb),
+.initialized(initialized),
+.gdma_happening(gdma_happening),
+.speed_double(speed_double));
+
+//-------------------------------------------
+//
+//	Memory controller
+//
+//-------------------------------------------
+
+reg [7:0] mem_controller_data_out;
+reg [7:0] dma_wr_addr;
+reg [7:0] dma_data;
+reg dma_we;
+reg dma_happening;
+
+wire [15:0] gdma_wr_addr;
+wire [7:0] gdma_data;
+wire gdma_we;
+wire gdma_happening;
+
+reg unloaded;
+reg gb_rom;
+
+gb_memory_controller mem_control(
+.rst(rst), 
+.clock(memory_clock), 
+.addr_bus(cpu_addr_bus), 
+.data_in(cpu_data_bus_out), 
+.data_out(mem_controller_data_out), 
+.we(cpu_we),
+.rd(cpu_re), 
+.cgb(cgb), 
+.initialized(initialized),
+.dma_wr_addr(dma_wr_addr),
+.dma_we(dma_we),
+.dma_happening(dma_happening),
+.dma_data(dma_data),
+.gdma_wr_addr(gdma_wr_addr),
+.gdma_we(gdma_we),
+.gdma_happening(gdma_happening),
+.gdma_data(gdma_data),
+.unloaded(unloaded),
+.gb_rom(gb_rom),
+.uart_addr(uart_load_addr),
+.uart_data_in(uart_data_rcv),
+.uart_we(uart_load_we),
+.uart_load(uart_loading));
+
+//-------------------------------------------
+//
+//	Video hardware 
+//
+//-------------------------------------------
+
+reg [15:0] vram_search_addr;
+reg [15:0] char_addr;
+reg [7:0] tile_attr;
+reg [7:0] tile_attr_cur;
+reg [7:0] data;
+reg [7:0] q;
+
+reg [1:0] bg_color_index;
+reg [1:0] sprite_color_index;
+reg [1:0] color_index;
+reg [15:0] color;
+
+reg [8:0] pixel_x;
+reg [8:0] pixel_y;
+
 
 //-------------------------------------------
 //
@@ -131,20 +760,11 @@ reg [7:0] Reg_vbank_ff4f = 0;
 reg [7:0] Reg_TIMA_ff05 =8'h00;
 reg [7:0] Reg_TMA_ff06 =8'h00;
 reg [7:0] Reg_TAC_ff07 =8'h00;
-
-
-//-------------------------------------------
-//
-//	Pixel offsets
-//
-//-------------------------------------------
-reg [8:0] x_offset;
-reg [8:0] y_offset;
-
+//reg [7:0] Reg_IF_ff0f =8'h00;
 
 //------------------------------------------
 //
-// Timer / Div  (todo:THIS DOES NOT BELONG HERE...MOVE)
+// Timer / Div
 //
 //------------------------------------------
 reg [15:0] timer_accumulator;
@@ -184,9 +804,9 @@ begin
 			if(cpu_we) begin
 				case (cpu_addr_bus[6:0])
 					7'h04: timer_accumulator = 0;
-					7'h05: Reg_TIMA_ff05 = data_bus_in;
-					7'h06: Reg_TMA_ff06 = data_bus_in;
-					7'h07: Reg_TAC_ff07[2:0] = data_bus_in[2:0];
+					7'h05: Reg_TIMA_ff05 = cpu_data_bus_out;
+					7'h06: Reg_TMA_ff06 = cpu_data_bus_out;
+					7'h07: Reg_TAC_ff07[2:0] = cpu_data_bus_out[2:0];
 				default: begin end
 				endcase
 			end
@@ -215,48 +835,26 @@ begin
 	end
 end
 
-
 //-------------------------------------------
 //
-//	Vga driver
+//	Pixel offsets
 //
 //-------------------------------------------
+reg [8:0] x_offset;
+reg [8:0] y_offset;
 
-reg 				hs_;
-reg				vs_;
 
-//vga pixel counters
-wire [12:0] x;
-wire [12:0] y;
 
-wire _vblank;
-wire _hblank;
 
-vga_controller_1280x1024 vga (vga_clock, vs_, hs_, _vblank, _hblank, x, y);
 
 //-------------------------------------------
-//
-//	Frame buffer 
-//
+
+vga_controller_1280x1024 vga (clock_108, vs_, hs_, _vblank, _hblank, x, y);
+
+vga_clock clocks(clock_50mhz, reset, clock_108, full_clock, dac_mclk, dac_bclk, uart_clk, clock_20mhz, locked);
+
+
 //-------------------------------------------
-
-
-reg [1:0] fb_data_in;
-reg [15:0] fb_data_out;
-reg [15:0] fb_write_addr;
-reg [15:0] fb_read_addr;
-reg fb_we;
-
-framebuffer fb(
-	mipi_color,
-	fb_read_addr,
-	vga_clock,
-	fb_write_addr,
-	pixel_clock,
-	fb_we,
-	fb_data_out);
-	
-
 
 //-------------------------------------------
 //
@@ -283,11 +881,11 @@ gb_vram vram1(gdma_happening ? gdma_wr_addr : vram1_addr_bus[12:0],
 	(vram_we | (gdma_happening & gdma_we)) & ~Reg_vbank_ff4f[0],
 	vram1_data_out);
 
-gb_vram vram2(gdma_happening ? gdma_wr_addr : vram2_addr_bus[12:0],
-	memory_clock,
-	gdma_happening ? gdma_data :vram_data_in,
-	(vram_we | (gdma_happening & gdma_we)) & Reg_vbank_ff4f[0],
-	vram2_data_out);
+//gb_vram vram2(gdma_happening ? gdma_wr_addr : vram2_addr_bus[12:0],
+//	memory_clock,
+//	gdma_happening ? gdma_data :vram_data_in,
+//	(vram_we | (gdma_happening & gdma_we)) & Reg_vbank_ff4f[0],
+//	vram2_data_out);
 //-------------------------------------------
 //
 //	OAM Mem
@@ -300,7 +898,7 @@ reg [7:0] oam_data_out;
 reg [7:0] oam_addr_bus;
 reg [7:0] oam_wr_addr_bus;
 
-gb_oam oam(
+gb_oam2 oam(
 	memory_clock,
 	oam_data_in,
 	oam_addr_bus[7:0], oam_wr_addr_bus,
@@ -314,21 +912,6 @@ gb_oam oam(
 //
 //-------------------------------------------
 
-reg [15:0] vram_search_addr;
-reg [15:0] char_addr;
-reg [7:0] tile_attr;
-reg [7:0] tile_attr_cur;
-reg [7:0] data;
-reg [7:0] q;
-
-reg [1:0] bg_color_index;
-reg [1:0] sprite_color_index;
-reg [1:0] color_index;
-reg [15:0] color;
-
-reg [8:0] pixel_x;
-reg [8:0] pixel_y;
-
 parameter [2:0] PIXEL_STATE_Ba=3'd0,PIXEL_STATE_0a=3'd2,PIXEL_STATE_1a=3'd4,PIXEL_STATE_Sa=3'd6,
 					 PIXEL_STATE_Bb=3'd1,PIXEL_STATE_0b=3'd3,PIXEL_STATE_1b=3'd5,PIXEL_STATE_Sb=3'd7;
 
@@ -341,8 +924,8 @@ wire valid_vram_addr;
 always_comb
 begin
 	
-		vram_data_in <= data_bus_in;
-		oam_wr_addr_bus <= dma_happening ? dma_wr_addr[7:0] : cpu_addr_bus[7:0];
+		vram_data_in <= cpu_data_bus_out;
+		oam_wr_addr_bus <= dma_happening ? dma_wr_addr : cpu_addr_bus[7:0];
 		
 		case (render_mode)
 			0: begin
@@ -369,10 +952,13 @@ begin
 		
 		vram_data_out <= Reg_vbank_ff4f[0] & gbc ? vram2_data_out : vram1_data_out;
 		
-		oam_data_in <= dma_happening ? dma_data : data_bus_in;
+		oam_data_in <= dma_happening ? dma_data : cpu_data_bus_out;
 		
 		
-		//todo: why is timer crap here!?
+		rst <= ~rst_button ;
+		
+		gbc = ~switches[0];
+		
 		case (Reg_TAC_ff07[1:0])
 			2'b00: timer_tick <= Reg_TAC_ff07[2] & timer_accumulator[9];
 			2'b01: timer_tick <= Reg_TAC_ff07[2] & timer_accumulator[3];
@@ -382,7 +968,7 @@ begin
 		
 			casex (cpu_addr_bus)
 		16'h8xxx, 16'h9xxx: begin
-			data_bus_out = render_mode == 2'b11 ? 8'hFF : vram_data_out;
+			cpu_data_bus_in = render_mode == 2'b11 ? 8'hFF : vram_data_out;
 			vram_we = render_mode == 2'b11 ? 1'b0 :  cpu_we;
 			oam_we = 1'b0;
 		end
@@ -391,37 +977,40 @@ begin
 			oam_we <= 1'b0;
 		
 			casex (cpu_addr_bus[6:0])
-					7'h02: data_bus_out = Reg_SC_ff02 ;
+					7'h01: cpu_data_bus_in = serial_xfr_complete ? 8'hff : Reg_SB_ff01 ;
+					7'h02: cpu_data_bus_in = Reg_SC_ff02 ;
 					
-					7'h04: data_bus_out = timer_accumulator[15:8];
-					7'h05: data_bus_out = Reg_TIMA_ff05;
-					7'h06: data_bus_out = Reg_TMA_ff06;
-					7'h07: data_bus_out = Reg_TAC_ff07;
-					7'h45: data_bus_out = Reg_lyc_ff45;
-					7'h44: data_bus_out = pixel_y[7:0];
-					7'h40: data_bus_out = Reg_LCDcontrol_ff40;
-					7'h41: data_bus_out = {Reg_LCDstatus_ff41[7:3],Reg_LCDcontrol_ff40[7] ? pixel_y == Reg_lyc_ff45 : 1'b1, Reg_LCDcontrol_ff40[7] ? render_mode : 2'b00};
-					7'h43: data_bus_out = Reg_xscroll_ff43;
-					7'h42: data_bus_out = Reg_yscroll_ff42;
-					7'h47: data_bus_out = Reg_palette_ff47;
-					7'h48: data_bus_out = Reg_palette_ff48;
-					7'h49: data_bus_out = Reg_palette_ff49;
-					7'h4b: data_bus_out = Reg_winX_ff4b;
-					7'h4a: data_bus_out = Reg_winY_ff4a;
-					7'h00: data_bus_out = Reg_buttons_ff00;
-					7'h4f: data_bus_out = Reg_vbank_ff4f | 8'hfe;
+					7'h04: cpu_data_bus_in = timer_accumulator[15:8];
+					7'h05: cpu_data_bus_in = Reg_TIMA_ff05;
+					7'h06: cpu_data_bus_in = Reg_TMA_ff06;
+					7'h07: cpu_data_bus_in = Reg_TAC_ff07;
+					7'h08: cpu_data_bus_in = {7'b0,uart_data_rdy};
+					7'h09: cpu_data_bus_in = uart_data_rcv;
+					7'h45: cpu_data_bus_in = Reg_lyc_ff45;
+					7'h44: cpu_data_bus_in = pixel_y[7:0];
+					7'h40: cpu_data_bus_in = Reg_LCDcontrol_ff40;
+					7'h41: cpu_data_bus_in = {Reg_LCDstatus_ff41[7:3],Reg_LCDcontrol_ff40[7] ? pixel_y == Reg_lyc_ff45 : 1'b1, Reg_LCDcontrol_ff40[7] ? render_mode : 2'b00};
+					7'h43: cpu_data_bus_in = Reg_xscroll_ff43;
+					7'h42: cpu_data_bus_in = Reg_yscroll_ff42;
+					7'h47: cpu_data_bus_in = Reg_palette_ff47;
+					7'h48: cpu_data_bus_in = Reg_palette_ff48;
+					7'h49: cpu_data_bus_in = Reg_palette_ff49;
+					7'h4b: cpu_data_bus_in = Reg_winX_ff4b;
+					7'h4a: cpu_data_bus_in = Reg_winY_ff4a;
+					7'h00: cpu_data_bus_in = Reg_buttons_ff00;
+					7'h4f: cpu_data_bus_in = Reg_vbank_ff4f | 8'hfe;
 					
-					7'h68: data_bus_out = {Reg_bgPalCtl_ff68, 1'b0, bg_palette_mem_index};
-					7'h69: data_bus_out = bg_palette_mem_index[0] ? bg_palette_mem1_data_out : bg_palette_mem2_data_out;
-					7'h6a: data_bus_out = {Reg_oamPalCtl_ff6a, 1'b0, oam_palette_mem_index};
-					7'h6b: data_bus_out = oam_palette_mem_index[0] ? oam_palette_mem1_data_out : oam_palette_mem2_data_out;
+					7'h68: cpu_data_bus_in = {Reg_bgPalCtl_ff68, 1'b0, bg_palette_mem_index};
+					7'h69: cpu_data_bus_in = bg_palette_mem_index[0] ? bg_palette_mem1_data_out : bg_palette_mem2_data_out;
+					7'h6a: cpu_data_bus_in = {Reg_oamPalCtl_ff6a, 1'b0, oam_palette_mem_index};
+					7'h6b: cpu_data_bus_in = oam_palette_mem_index[0] ? oam_palette_mem1_data_out : oam_palette_mem2_data_out;
 					
-					//7'h1X, 7'h2X, 7'h3X: data_bus_out = sound_data_bus_out;
-					default: data_bus_out = 8'hff; 
+					7'h1X, 7'h2X, 7'h3X: cpu_data_bus_in = sound_data_bus_out;
+					default: cpu_data_bus_in = 8'hff; 
 				endcase	
 		end
 		16'b11111110xxxxxxxx: begin //0xfe00 oam
-			data_bus_out <=  oam_data_out;  //todo, this probably just gets oam_Dat
+			cpu_data_bus_in <=  oam_data_out;  //todo, this probably just gets oam_Dat
 			oam_we <=   ((render_mode[1] & ~dma_happening) ) ? 1'b0 :  cpu_we;
 			vram_we <= 1'b0;
 		end
@@ -429,7 +1018,7 @@ begin
 		default: begin
 			vram_we <= 1'b0;
 			oam_we <= 1'b0;
-			data_bus_out <= memory_controller_data_in;
+			cpu_data_bus_in <= mem_controller_data_out;
 		end
 	endcase
 end
@@ -456,35 +1045,35 @@ reg [4:0] oam_palette_mem_index_vr;
 reg [7:0] oam_palette_mem1_data_out;
 reg [7:0] oam_palette_mem2_data_out;
 
-
-gb_palette_mem bg_palette_mem1(
+//todo ...clock gate?
+gb_palette_ram bg_palette_mem1(
 	.address(render_mode == 2'b11 ? bg_palette_mem_index_vr : bg_palette_mem_index[5:1]),
 	.clock(cpu_clock), //cpu and pixel clock might be different
-	.data(data_bus_in),
+	.data(cpu_data_bus_out),
 	.wren((cpu_we && cpu_addr_bus == 16'hff69) && bg_palette_mem_index[0]),
 	.q(bg_palette_mem1_data_out)
 );
 
-gb_palette_mem bg_palette_mem2(
+gb_palette_ram bg_palette_mem2(
 	.address(render_mode == 2'b11 ? bg_palette_mem_index_vr : bg_palette_mem_index[5:1]),
 	.clock(cpu_clock),
-	.data(data_bus_in),
+	.data(cpu_data_bus_out),
 	.wren((cpu_we && cpu_addr_bus == 16'hff69) & ~bg_palette_mem_index[0]),
 	.q(bg_palette_mem2_data_out)
 );
 
-gb_palette_mem oam_palette_mem1(
+gb_palette_ram oam_palette_mem1(
 	.address(render_mode == 2'b11 ? oam_palette_mem_index_vr : oam_palette_mem_index[5:1]),
 	.clock(cpu_clock),
-	.data(data_bus_in),
+	.data(cpu_data_bus_out),
 	.wren((cpu_we && cpu_addr_bus == 16'hff6b) & oam_palette_mem_index[0]),
 	.q(oam_palette_mem1_data_out)
 );
 
-gb_palette_mem oam_palette_mem2(
+gb_palette_ram oam_palette_mem2(
 	.address(render_mode == 2'b11 ? oam_palette_mem_index_vr : oam_palette_mem_index[5:1]),
 	.clock(cpu_clock),
-	.data(data_bus_in),
+	.data(cpu_data_bus_out),
 	.wren((cpu_we && cpu_addr_bus == 16'hff6b)  & ~oam_palette_mem_index[0]),
 	.q(oam_palette_mem2_data_out)
 );
@@ -564,6 +1153,40 @@ reg bg_edge_det;
 reg bg_or_pal;
 reg bg_or_pal2;
 
+reg [13:0] serial_clock_out;
+
+reg serial_xfr_complete;
+
+always @(posedge cpu_clock)
+begin
+	if(rst) begin 
+		serial_clock_out = 14'b10000000000000;
+		serial_xfr_complete = 0;
+		Reg_SC_ff02 = 8'b0;
+		irq[3] = 0;
+	end else begin
+		if(cpu_addr_bus == 16'hff02 && cpu_we) begin
+			serial_xfr_complete = 0;
+			Reg_SC_ff02 = cpu_data_bus_out;
+			if(cpu_data_bus_out[7]) begin
+				serial_clock_out = 14'b01111111111111;
+			end
+		end
+		
+	
+	
+		irq[3] = ~|serial_clock_out;
+		
+		if(serial_clock_out == 0) begin
+			Reg_SC_ff02[7] = 0;
+			serial_clock_out = 14'b10000000000000;
+			serial_xfr_complete = 1;
+		end else if (~serial_clock_out[13] & Reg_SC_ff02[0] ) begin
+			serial_clock_out = serial_clock_out - 1'b1;
+		end
+	end
+end
+
 reg lcy_zero_hack;
 
 always @(posedge pixel_clock)
@@ -622,34 +1245,34 @@ begin
 			if(cpu_we) begin
 				case (cpu_addr_bus[6:0])
 					7'h44: begin end // lcd y (read only)
-					7'h00: Reg_buttons_ff00[5:4] = data_bus_in[5:4];
-					7'h01: Reg_SB_ff01 = data_bus_in;
+					7'h00: Reg_buttons_ff00[5:4] = cpu_data_bus_out[5:4];
+					7'h01: Reg_SB_ff01 = cpu_data_bus_out;
 					7'h40: begin
-							LCD_power_cycle =   ~data_bus_in[7];
-							Reg_LCDcontrol_ff40 = data_bus_in;
+							LCD_power_cycle =   ~cpu_data_bus_out[7];
+							Reg_LCDcontrol_ff40 = cpu_data_bus_out;
 							
 					end
-					7'h41: Reg_LCDstatus_ff41[6:3] = data_bus_in[6:3];
-					7'h43: Reg_xscroll_ff43 = data_bus_in;
-					7'h45: Reg_lyc_ff45 = data_bus_in;
-					7'h42: Reg_yscroll_ff42 = data_bus_in;
-					7'h47: Reg_palette_ff47 = data_bus_in;
-					7'h48: Reg_palette_ff48 = data_bus_in;
-					7'h49: Reg_palette_ff49 = data_bus_in;
-					7'h4b: Reg_winX_ff4b = data_bus_in;
-					7'h4f: Reg_vbank_ff4f[0] = data_bus_in[0];
-					7'h4a: Reg_winY_ff4a = data_bus_in;
+					7'h41: Reg_LCDstatus_ff41[6:3] = cpu_data_bus_out[6:3];
+					7'h43: Reg_xscroll_ff43 = cpu_data_bus_out;
+					7'h45: Reg_lyc_ff45 = cpu_data_bus_out;
+					7'h42: Reg_yscroll_ff42 = cpu_data_bus_out;
+					7'h47: Reg_palette_ff47 = cpu_data_bus_out;
+					7'h48: Reg_palette_ff48 = cpu_data_bus_out;
+					7'h49: Reg_palette_ff49 = cpu_data_bus_out;
+					7'h4b: Reg_winX_ff4b = cpu_data_bus_out;
+					7'h4f: Reg_vbank_ff4f[0] = cpu_data_bus_out[0];
+					7'h4a: Reg_winY_ff4a = cpu_data_bus_out;
 					
 					7'h68: begin 
-						Reg_bgPalCtl_ff68 = data_bus_in[7];
-						bg_palette_mem_index_next = data_bus_in[5:0];
+						Reg_bgPalCtl_ff68 = cpu_data_bus_out[7];
+						bg_palette_mem_index_next = cpu_data_bus_out[5:0];
 					end
 					7'h69: begin
 						bg_edge_det = 1'b1;
 					end
 					7'h6a: begin 
-						Reg_oamPalCtl_ff6a = data_bus_in[7];
-						oam_palette_mem_index_next = data_bus_in[5:0];
+						Reg_oamPalCtl_ff6a = cpu_data_bus_out[7];
+						oam_palette_mem_index_next = cpu_data_bus_out[5:0];
 					end
 					7'h6b: begin 
 						oam_edge_det = 1'b1;
@@ -1050,19 +1673,12 @@ end
 
 end 
 
-
-//-------------------------------------------
-//
-//	VGA signal generation
-//
-//-------------------------------------------
-
 reg signed [10:0]	out_x;
 reg [10:0]	out_y;
 reg [12:0]	shift_x;
 reg [12:0]	shift_y;
 
-always @(posedge vga_clock)
+always @(posedge clock_vga)
 begin
 	
 	
@@ -1080,8 +1696,8 @@ begin
 		color=16'h0;
 	end
 	
-	vga_vs<=vs_;
-	vga_hs<=hs_;
+	vs<=vs_;
+	hs<=hs_;
 end
 
 
@@ -1090,301 +1706,22 @@ always_comb
 begin
 	//blank signals to the adv7123 chip 
 	//vs and hs go directly to the vga connector
-	vga_hblank<=1;  //unused (required only if sync on green)
-   vga_vblank<=vga_vs; //
+	hblank<=1;  //unused (required only if sync on green)
+   vblank<=vs; //
 	
-
+	clock_vga<=clock_108;
 		
 	if((_vblank & _hblank)) begin	
 		
-		vga_red <= {color[4:0], 3'b0};
-		vga_green <= {color[9:5], 3'b0};
-		vga_blue <= {color[14:10], 3'b0};
+		r <= {color[4:0], 3'b0};
+		g <= {color[9:5], 3'b0};
+		b <= {color[14:10], 3'b0};
 	
-	end else begin
-		vga_red<=0;
-		vga_green<=0;
-		vga_blue<=0;
+		end else begin
+		r<=0;
+		g<=0;
+		b<=0;
 	end
 end
 
-
-
-//-------------------------------------------
-//
-//	MIPI signal generation
-//
-//-------------------------------------------
-
-reg [7:0] mipi_pwm_duty;
-reg [2:0] mipi_state;
-reg [7:0] mipi_data_out;
-reg [7:0] mipi_control_out;
-reg [8:0] mipi_x;
-reg [2:0] mipi_wr_state;
-reg [15:0] mipi_color;
-reg [1:0] mipi_x_toggle; //scalling
-reg [2:0] mipi_y_toggle; //scalling
-reg  mipi_line_toggle;  
-//clock crossing
-reg mipi_line_toggle_pixel_clock[1:0];
-reg [8:0] mipi_pixel_y[1:0];
-reg mipi_Reg_LCDcontrol_ff40[1:0];
-reg [2:0] mipi_render_mode[1:0];
-reg mipi_unloaded[1:0];
-
-reg [7:0] mipi_index;
-
-reg [7:0] mipi_cmd;
-reg [7:0] mipi_y;
-
-reg [15:0] mipi_data_out1;
-reg [15:0] mipi_data_out2;
-
-reg [7:0] mipi_line_buffer_wr_addr;
-
-mipi_line_buffer mipi_line_buffer1(
-	.data({mipi_color[4:0], mipi_color[9:5], 1'b0, mipi_color[14:10]}),
-	.rdaddress(mipi_index),
-	.rdclock(mipi_clock),
-	.wraddress(mipi_line_buffer_wr_addr),
-	.wrclock(pixel_clock),
-	.wren(fb_we & mipi_line_toggle_pixel_clock[1]),
-	.q(mipi_data_out1)
-	);
-mipi_line_buffer mipi_line_buffer2(
-	.data({mipi_color[4:0], mipi_color[9:5], 1'b0, mipi_color[14:10]}),
-	.rdaddress(mipi_index),
-	.rdclock(mipi_clock),
-	.wraddress(mipi_line_buffer_wr_addr),
-	.wrclock(pixel_clock),
-	.wren(fb_we & ~mipi_line_toggle_pixel_clock[1]),
-	.q(mipi_data_out2)
-	);
-
-//clock crossing	
-always @(posedge pixel_clock)
-begin
-	mipi_line_toggle_pixel_clock[0] <= mipi_line_toggle;
-	mipi_line_toggle_pixel_clock[1] <= mipi_line_toggle_pixel_clock[0];
-end
-
-always @(posedge mipi_clock)
-begin
-
-mipi_pixel_y[0] = pixel_y;
-mipi_pixel_y[1] = mipi_pixel_y[0];
-
-mipi_Reg_LCDcontrol_ff40[0] = Reg_LCDcontrol_ff40[7];
-mipi_Reg_LCDcontrol_ff40[1] = mipi_Reg_LCDcontrol_ff40[0];
-
-mipi_render_mode[0] = render_mode;
-mipi_render_mode[1] = mipi_render_mode[0];
-
-mipi_unloaded[0] = unloaded;
-mipi_unloaded[1] = mipi_unloaded[0];
-
-end
-
-always @(posedge cpu_clock)
-begin
-	if(rst) begin
-		mipi_pwm_duty = 8'h3f;
-	end else begin
-		if(cpu_we && cpu_addr_bus == 16'hff84) begin
-			mipi_data_out = data_bus_in;
-		end else if (cpu_we && cpu_addr_bus == 16'hff85 && unloaded) begin
-			mipi_control_out = data_bus_in;
-		end
-		
-		mipi_pwm_duty = {mipi_pwm_duty[0],mipi_pwm_duty[7:1]};
-		mipi_pwm =  mipi_pwm_duty[7];
-	end
-end
-
-always @(posedge mipi_clock)
-begin
-	if(rst) begin
-		mipi_state = 0;
-		mipi_x = 0;
-		mipi_wr_state = 0;
-		mipi_line_toggle = 0;
-		mipi_index = 2;
-		mipi_y = 0;
-		mipi_cmd = 8'h0;
-	end else begin
-
-		
-		
-		case (mipi_state)
-			0: begin  //resetting
-	
-				{mipi_rd, mipi_wr, mipi_cs, mipi_dc, mipi_rst, mipi_cm, mipi_shut, mipi_vddio_ctrl} = {mipi_control_out[7:3], 1'b0, 1'b0, 1'b1};
-				mipi_rgb = mipi_data_out;
-				mipi_state = (~mipi_unloaded[1] && (mipi_pixel_y[1] != 8'd145));
-			end
-			1: begin
-				if(~mipi_Reg_LCDcontrol_ff40[1] && mipi_cmd != 8'h23) begin
-					mipi_cmd = 8'h23;
-					mipi_state = 3'd2;	
-				end else if (mipi_cmd == 8'h23 ) begin
-					mipi_cmd = 8'h13;
-					mipi_state = 3'd2;	
-				end else begin
-				
-					mipi_state = (mipi_render_mode[1] == 2'd0 ? 3'd2 : 3'd1) ;
-					
-					mipi_index = 2;
-					mipi_x = 9'd0;
-					mipi_x_toggle = 0;
-										
-					mipi_cmd = (mipi_pixel_y[1] == 9'd0 ? 8'h2C : 8'h3C);
-					
-					if(mipi_render_mode[1] == 2'd0) begin
-						mipi_line_toggle = mipi_line_toggle ^ 1'b1;
-					end
-				end
-				
-				mipi_wr_state = 0;
-						
-				
-			end
-
-			2:begin  //write start byte
-				mipi_y = mipi_y + 1'b1;
-				
-				case(mipi_wr_state)
-					0: begin
-						mipi_rgb = mipi_cmd;
-						mipi_wr = 1;
-						mipi_cs = 1;
-						mipi_dc = 0;
-						mipi_rd = 1;
-					end
-					1: begin
-						mipi_wr = 1;
-						mipi_cs = 0;
-						mipi_dc = 0;
-						mipi_rd = 1;
-					end
-					2: begin
-						mipi_wr = 0;
-						mipi_cs = 0;
-						mipi_dc = 0;
-						mipi_rd = 1;
-					end
-					3: begin
-						mipi_wr = 1;
-						mipi_cs = 1;
-						mipi_dc = 1;
-						mipi_rd = 1;
-					end
-					4: begin
-						mipi_wr = 1;
-						mipi_cs = 0;
-						mipi_dc = 1;
-						mipi_rd = 1;
-					end
-					default: begin end
-				endcase 
-				
-					mipi_wr_state  = mipi_wr_state + 1'b1;
-					
-					if(~|mipi_wr_state) begin
-						mipi_state = (mipi_cmd == 8'd23 || mipi_cmd == 8'd13) ? 3'd1 : 3'd3;
-					end
-					
-					
-					mipi_x = 0;
-					mipi_index = 2;
-	
-			end
-			3: begin
-			
-		
-   			case(mipi_wr_state[1:0])
-					0: begin
-						mipi_rgb =  mipi_line_toggle ? mipi_data_out2[7:0] : mipi_data_out1[7:0];
-						mipi_wr = 0;
-						mipi_cs = 0;
-						mipi_dc = 1;
-						mipi_rd = 1;
-	
-					end
-					1: begin
-						mipi_wr = 1;
-						mipi_cs = 0;
-						mipi_dc = 1;
-						mipi_rd = 1;
-					
-					end
-					2: begin
-						mipi_rgb = mipi_line_toggle ? mipi_data_out2[15:8] : mipi_data_out1[15:8];
-						mipi_wr = 0;
-						mipi_cs = 0;
-						mipi_dc = 1;
-						mipi_rd = 1;
-					
-				   	mipi_x = mipi_x + 1'b1;
-						
-						if(mipi_x_toggle != 2'd3 || mipi_scale) begin
-						
-							mipi_index = mipi_index + 1'b1;
-						end else begin
-							mipi_x_toggle = 0;
-						end
-						
-						mipi_x_toggle = mipi_x_toggle + 1'b1;	
-					end
-					3: begin
-						mipi_wr = 1;
-						mipi_cs = 0;
-						mipi_dc = 1;
-						mipi_rd = 1;
-						
-					end
-					default: begin end
-				endcase 
-									
-				mipi_wr_state = mipi_wr_state + 1'b1;
-				
-				if(mipi_x > 240) begin
-					mipi_x = 0;
-					mipi_index = 2;
-					mipi_x_toggle = 0;
-					mipi_wr_state = 0;
-					
-					if(((mipi_y_toggle != 3'd3 && mipi_y_toggle != 3'd5) |  mipi_scale)) begin
-						mipi_state = 3'd4;							
-					end else begin
-						mipi_state = 3'd2;
-						mipi_y_toggle = mipi_y_toggle == 3'd5 ? 3'd0 : mipi_y_toggle;
-					end
-					
-					mipi_y_toggle = mipi_y_toggle + 1'b1;
-
-				end
-	
-		end
-		4: begin
-			mipi_state = mipi_render_mode[1] == 2'd0 ? 3'd4 : 3'd1;
-		end
-
-		default: 
-		
-			begin 
-				mipi_state = 2'b01;
-			end
-		
-		endcase
-		
-		if(~mipi_Reg_LCDcontrol_ff40[1]) begin
-			mipi_state = mipi_state ? 3'd1 : 3'd0;
-		end
-		
-	end
-	
-end
-
-
-endmodule
+endmodule 

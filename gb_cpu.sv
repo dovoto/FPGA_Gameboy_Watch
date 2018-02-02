@@ -333,6 +333,7 @@ begin
 		IME = 0;
 		IME_next = 0;
 		jump = 0;
+		PC_jump = 0;
 		halt = 0;
 		stop = 0;
 		extended_hl = 1'b0;
@@ -340,6 +341,8 @@ begin
 		instr_count = 0;
 		halt_bug = 0;
 		cpu_we = 0;
+		addr_bus = 0;
+		
 		speed_double = 0;
 	end else if (gdma_happening && cycles == 3) begin
 		//dont think I need to do anything here...stop on the third cycle
