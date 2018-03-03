@@ -1165,24 +1165,28 @@ mipi_line_buffer mipi_line_buffer2(
 //clock crossing	
 always @(posedge pixel_clock)
 begin
-	mipi_line_toggle_pixel_clock[0] <= mipi_line_toggle;
 	mipi_line_toggle_pixel_clock[1] <= mipi_line_toggle_pixel_clock[0];
+	mipi_line_toggle_pixel_clock[0] <= mipi_line_toggle;
+	
 end
 
 always @(posedge mipi_clock)
 begin
 
-mipi_pixel_y[0] = pixel_y;
-mipi_pixel_y[1] = mipi_pixel_y[0];
+mipi_pixel_y[1] <= mipi_pixel_y[0];
+mipi_pixel_y[0] <= pixel_y;
 
-mipi_Reg_LCDcontrol_ff40[0] = Reg_LCDcontrol_ff40[7];
-mipi_Reg_LCDcontrol_ff40[1] = mipi_Reg_LCDcontrol_ff40[0];
+mipi_Reg_LCDcontrol_ff40[1] <= mipi_Reg_LCDcontrol_ff40[0];
+mipi_Reg_LCDcontrol_ff40[0] <= Reg_LCDcontrol_ff40[7];
 
-mipi_render_mode[0] = render_mode;
-mipi_render_mode[1] = mipi_render_mode[0];
 
-mipi_unloaded[0] = unloaded;
-mipi_unloaded[1] = mipi_unloaded[0];
+mipi_render_mode[1] <= mipi_render_mode[0];
+mipi_render_mode[0] <= render_mode;
+
+
+mipi_unloaded[1] <= mipi_unloaded[0];
+mipi_unloaded[0] <= unloaded;
+
 
 end
 

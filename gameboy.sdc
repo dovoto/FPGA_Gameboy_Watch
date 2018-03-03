@@ -52,7 +52,12 @@ derive_clock_uncertainty
 #**************************************************************
 # Set Clock Groups
 #**************************************************************
-
+set_clock_groups -asynchronous \
+-group { \
+imfrp|altpll_component|auto_generated|pll1|clk[0] \
+imfrp|altpll_component|auto_generated|pll1|clk[1] \
+imfrp|altpll_component|auto_generated|pll1|clk[3] \
+ } \
 
 
 #**************************************************************
