@@ -220,15 +220,15 @@ namespace SimpleSerial
                         BinaryReader br = new BinaryReader(myStream);
                         pbLoad.Value = 0;
 
-                        int i = -1;
-                        br.BaseStream.Seek(-1, SeekOrigin.End);
-                        while (br.BaseStream.ReadByte() == 0)
-                        {
-                            br.BaseStream.Seek(i, SeekOrigin.End);
-                            i--;
-                        }
+                        //int i = -1;
+                        //br.BaseStream.Seek(-1, SeekOrigin.End);
+                        //while (br.BaseStream.ReadByte() == 0)
+                        //{
+                        //    br.BaseStream.Seek(i, SeekOrigin.End);
+                        //    i--;
+                        //}
 
-                        long len = br.BaseStream.Length + i + 1;
+                        long len = br.BaseStream.Length ;
 
                         byte[] data = new byte[4];
 
@@ -261,7 +261,7 @@ namespace SimpleSerial
                         }
 
                         // serialPort1.Write(b, 0, 1);
-                        serialPort1.Write(b, 0, 1);
+                       // serialPort1.Write(b, 0, 1);
 
                         pbLoad.Value = 100;
                     }

@@ -466,7 +466,7 @@ begin
 				
 		
 			end
-			gdma_happening = (~gdma_counter[11]) | gdma_counter[4];
+			gdma_happening = (~gdma_counter[11]);
 			
 		end
 end
@@ -563,7 +563,7 @@ begin
 //			sdram_rd = 1'b0;
 			zpage_we = 1'b0;
 			cart_ram_we = 1'b0;
-			rom_we = unloaded & we;
+			rom_we = 1'b0;
 		end
 		16'b101xxxxxxxxxxxxx: begin //cart ram
 			data_out = ram_enabled ? cart_ram_data_out : 8'hff;

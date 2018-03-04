@@ -675,7 +675,7 @@ begin
 	if(Reg_LCDcontrol_ff40[7]) begin
 	
 	
-		vblank_stat_toggle = pixel_x == 448 && pixel_y == 144;
+		vblank_stat_toggle = pixel_x == 448 && pixel_y == 145;
 	   hblank_stat_toggle = in_x == 160;
 		
 		

@@ -352,23 +352,25 @@ begin
 		
 	end else	if(((|valid_irqs  & IME & (cycles == 0)) | irq_begin)) begin
 		
-		cycles = cycles == 8'd0 ? 8'd12 : cycles;
+		cycles = cycles == 8'd0 ? 8'd20: cycles;
 		
 		
-		if (cycles == 12) begin
+		if (cycles == 20) begin
 			SP = SP_minusone;
 			addr_bus = SP;
 			cpu_data_out = PC_minusone[15:8];
 			cpu_we = 1;
 			re = 0;
 			irq_begin = 1;
-		end else if (cycles == 11) begin
+		end else if (cycles == 19) begin
 			cpu_we = 0;
-		end else if (cycles == 10) begin
+		end else if (cycles == 18) begin
 			SP = SP_minusone;
 			addr_bus = SP;
 			cpu_data_out = PC_minusone[7:0];
 			cpu_we = 1;
+		end else if (cycles == 16) begin
+			cpu_we = 0;
 		end else if (cycles == 8) begin
 			cpu_we = 0;
 			if(valid_irqs & 5'b00001) begin processedIRQ = 5'b00001; PC = 16'h0040; end
