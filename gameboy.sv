@@ -186,6 +186,8 @@ begin
 	Reg_buttons_ff00[1] = ~Reg_buttons_ff00[5] & snes_buttons[0] | ~Reg_buttons_ff00[4] & snes_buttons[6];
 	Reg_buttons_ff00[2] = ~Reg_buttons_ff00[5] & snes_buttons[2] | ~Reg_buttons_ff00[4] & snes_buttons[4];
 	Reg_buttons_ff00[3] = ~Reg_buttons_ff00[5] & snes_buttons[3] | ~Reg_buttons_ff00[4] & snes_buttons[5];
+	
+	irq[4] = ~(&snes_buttons[8:2] & snes_buttons[0]); 
 end
 
 //=======================================================

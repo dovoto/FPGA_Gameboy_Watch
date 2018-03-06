@@ -675,15 +675,18 @@ begin
 	if(Reg_LCDcontrol_ff40[7]) begin
 	
 	
-		vblank_stat_toggle = pixel_x == 448 && pixel_y == 145;
-	   hblank_stat_toggle = in_x == 160;
+		//vblank_stat_toggle = pixel_x == 448 && pixel_y == 144;
+	   //hblank_stat_toggle = in_x == 160;
 		
+//		vblank_stat_toggle = pixel_y >= 144;
+//	   hblank_stat_toggle = in_x == 160;
+//		lcy_stat_toggle = pixel_y == Reg_lyc_ff45;
 		
-		irq[0] = vblank_stat_toggle;
-		irq[1] = (Reg_LCDstatus_ff41[6] && lcy_stat_toggle) 
-					| (Reg_LCDstatus_ff41[4] &&  vblank_stat_toggle)
-					| (Reg_LCDstatus_ff41[3] && hblank_stat_toggle)
-					| (Reg_LCDstatus_ff41[5] && oam_stat_toggle);
+		irq[0] = render_mode == 3'b01;//vblank_stat_toggle;
+		irq[1] = (Reg_LCDstatus_ff41[6] && pixel_y == Reg_lyc_ff45)//lcy_stat_toggle) 
+					| (Reg_LCDstatus_ff41[4] && render_mode == 3'b01)//vblank_stat_toggle)
+					| (Reg_LCDstatus_ff41[3] && render_mode == 3'b00)//hblank_stat_toggle
+					| (Reg_LCDstatus_ff41[5] && render_mode == 3'b10);//oam_stat_toggle);
 		
 		pixel_x = pixel_x + 1'b1;
 		
@@ -981,9 +984,9 @@ begin
 			   lcy_zero_hack = 1;
 				pixel_y = 0;
 			end
-			lcy_stat_toggle = pixel_y == Reg_lyc_ff45;
+		//	lcy_stat_toggle = pixel_y == Reg_lyc_ff45;
 		end else begin
-			lcy_stat_toggle = 0;
+		//	lcy_stat_toggle = 0;
 		end
 		
 		if(pixel_x == 0) begin

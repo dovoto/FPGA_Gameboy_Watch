@@ -182,6 +182,7 @@ reg [7:0] Reg_IE_ffff;
 //reg [7:0] Reg_DMA_ff46;
 reg [7:0] Reg_speed_switch_ff4d;
 
+reg [7:0] irq_old;
 reg [7:0] pendingIRQ;
 reg [7:0] processedIRQ;
 reg [7:0] valid_irqs;
@@ -295,6 +296,7 @@ begin
 		Reg_IE_ffff = 0;
 		Reg_IF_ff0f = 8'hE0;
 		Reg_speed_switch_ff4d[0] = 0;
+		irq_old = 0;
 	end else begin
 	
 		if(cpu_we) begin
@@ -320,8 +322,11 @@ begin
 	SP_plusone = SP + 1'b1;
 	SP_minusone = SP - 1'b1;
 	
-	Reg_IF_ff0f = (Reg_IF_ff0f & ~processedIRQ) | irq ;
+	Reg_IF_ff0f = (Reg_IF_ff0f & ~processedIRQ) | (irq & ~irq_old) ;
 	valid_irqs = Reg_IF_ff0f & Reg_IE_ffff;
+	
+	irq_old = irq;
+	
 	
 	if(rst == 1) begin
 		opcode = 0;
