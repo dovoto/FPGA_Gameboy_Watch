@@ -1,3 +1,10 @@
+Compatibility: 
+Gameboy:
+~90% perfect (sound still sucks), 95% working with some issues
+
+Gameboy Color:
+0% perfect, Some working
+
 
 |   | works | issues | Previous issues (Fix) |  | Fixes |
 |  ------ | ------ | ------ | ------ | ------ | ------ |
