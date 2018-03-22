@@ -160,7 +160,7 @@ begin
 		//	7'h01: cpu_data_bus_in = serial_xfr_complete ? 8'hff : Reg_SB_ff01 ;
 			16'hff08: cpu_data_bus_in = {7'b0,uart_data_rdy};
 			16'hff09: cpu_data_bus_in = uart_data_rcv;
-			16'hff00: cpu_data_bus_in = Reg_buttons_ff00;
+			16'hff00: cpu_data_bus_in = Reg_buttons_ff00 | 8'hC0;
 			
 		//	7'h1X, 7'h2X, 7'h3X: cpu_data_bus_in = sound_data_bus_out;
 			default: cpu_data_bus_in <= video_controller_data_out;
@@ -173,7 +173,7 @@ always @(posedge cpu_clock)
 begin
 	
 	if(rst) begin
-			Reg_buttons_ff00[5:4] = 2'b0;
+			Reg_buttons_ff00[5:4] = 2'b11;
 	end else if(cpu_we) begin
 		casex (cpu_addr_bus)
 			16'hff00: Reg_buttons_ff00[5:4] = cpu_data_bus_out[5:4];
@@ -182,12 +182,50 @@ begin
 			
 	end
 	
-	Reg_buttons_ff00[0] = ~Reg_buttons_ff00[5] & snes_buttons[8] | ~Reg_buttons_ff00[4] & snes_buttons[7];
-	Reg_buttons_ff00[1] = ~Reg_buttons_ff00[5] & snes_buttons[0] | ~Reg_buttons_ff00[4] & snes_buttons[6];
-	Reg_buttons_ff00[2] = ~Reg_buttons_ff00[5] & snes_buttons[2] | ~Reg_buttons_ff00[4] & snes_buttons[4];
-	Reg_buttons_ff00[3] = ~Reg_buttons_ff00[5] & snes_buttons[3] | ~Reg_buttons_ff00[4] & snes_buttons[5];
+	Reg_buttons_ff00[0] = ~(~Reg_buttons_ff00[5] & ~snes_buttons[8] | ~Reg_buttons_ff00[4] & ~snes_buttons[7]);
+	Reg_buttons_ff00[1] = ~(~Reg_buttons_ff00[5] & ~snes_buttons[0] | ~Reg_buttons_ff00[4] & ~snes_buttons[6]);
+	Reg_buttons_ff00[2] = ~(~Reg_buttons_ff00[5] & ~snes_buttons[2] | ~Reg_buttons_ff00[4] & ~snes_buttons[4]);
+	Reg_buttons_ff00[3] = ~(~Reg_buttons_ff00[5] & ~snes_buttons[3] | ~Reg_buttons_ff00[4] & ~snes_buttons[5]);
 	
 	irq[4] = ~(&snes_buttons[8:2] & snes_buttons[0]); 
+end
+
+/// serial port 
+
+reg [7:0] Reg_serialbyte_ff01 = 0;
+reg [7:0] Reg_serialcontrol_ff02 = 0;
+reg [12:0] serialCount = 13'h1fff;
+
+always @(posedge cpu_clock)
+begin
+	
+	if(rst) begin
+			Reg_serialbyte_ff01 = 0;
+			Reg_serialcontrol_ff02 = 0;
+			serialCount = 13'h1fff;
+	end else begin
+	
+		if(cpu_we) begin
+			casex (cpu_addr_bus)
+				16'hff01: Reg_serialbyte_ff01 = cpu_data_bus_out;
+				16'hff02: begin
+					Reg_serialcontrol_ff02 = cpu_data_bus_out;
+					serialCount = (cpu_data_bus_out[7] &  cpu_data_bus_out[0]) ? 13'h0fff : 13'h1fff;
+				end
+				default: begin end
+			endcase
+			
+		end else begin
+		
+			if(~serialCount[12]) begin
+				serialCount = serialCount - 1'b1;
+			end
+		end
+	
+	
+		irq[3] = ~|serialCount;
+	end
+	
 end
 
 //=======================================================
@@ -247,11 +285,13 @@ gb_cpu cpu(
 
 wire [7:0] mem_controller_data_out;
 wire [7:0] dma_wr_addr;
+wire [15:0] dma_rd_addr;
 wire [7:0] dma_data;
 wire dma_we;
 wire dma_happening;
 
 wire [15:0] gdma_wr_addr;
+wire [15:0] gdma_rd_addr;
 wire [7:0] gdma_data;
 wire gdma_we;
 wire gdma_happening;
@@ -262,21 +302,13 @@ wire gb_rom;
 gb_memory_controller mem_control(
 .rst(rst), 
 .clock(cpu_clock), 
-.addr_bus(cpu_addr_bus), 
+.addr_bus(addr_bus), 
 .data_in(cpu_data_bus_out), 
 .data_out(mem_controller_data_out), 
 .we(cpu_we),
 .rd(cpu_re), 
 .cgb(cgb), 
 .initialized(initialized),
-.dma_wr_addr(dma_wr_addr),
-.dma_we(dma_we),
-.dma_happening(dma_happening),
-.dma_data(dma_data),
-.gdma_wr_addr(gdma_wr_addr),
-.gdma_we(gdma_we),
-.gdma_happening(gdma_happening),
-.gdma_data(gdma_data),
 .unloaded(unloaded),
 .gb_rom(gb_rom),
 .uart_addr(uart_load_addr),
@@ -284,7 +316,27 @@ gb_memory_controller mem_control(
 .uart_we(uart_load_we),
 .uart_load(uart_loading));
 
+gb_dma_controller dma_controller(
+.clock(cpu_clock),
+.rst(rst),
+.addr_bus(addr_bus),
+.we(cpu_we),
+.data_in(cpu_data_bus_out),
+.dma_wr_addr(dma_wr_addr),
+.dma_rd_addr(dma_rd_addr),
+.dma_we(dma_we),
+.dma_happening(dma_happening),
+.gdma_wr_addr(gdma_wr_addr),
+.gdma_rd_addr(gdma_rd_addr),
+.gdma_we(gdma_we),
+.gdma_happening(gdma_happening)
 
+);
+
+
+wire [15:0] addr_bus;
+
+assign addr_bus = gdma_happening ? gdma_rd_addr : dma_happening ? dma_rd_addr : cpu_addr_bus;
 
 //=======================================================
 // Video Hardware
@@ -296,6 +348,7 @@ assign VGA_CLK = vga_clock;
 wire [7:0] video_controller_data_out;
 wire [7:0] vga_irq;
 
+wire [7:0] the_data_bus = dma_happening ? mem_controller_data_out : cpu_data_bus_out;
 
 gb_video video_controller(
 .rst(rst),
@@ -311,20 +364,18 @@ gb_video video_controller(
 .memory_clock(cpu_clock),
 .mipi_clock(mipi_clock),  //20mhz clock to drive the mipi display
 
-.cpu_addr_bus(cpu_addr_bus),
+.cpu_addr_bus(addr_bus),
 .data_bus_out(video_controller_data_out),
-.data_bus_in(cpu_data_bus_out),
+.data_bus_in(the_data_bus),
 .memory_controller_data_in(mem_controller_data_out),
 .cpu_we(cpu_we),
 
 .dma_wr_addr(dma_wr_addr),
 .dma_we(dma_we),
 .dma_happening(dma_happening),
-.dma_data(dma_data),
 .gdma_wr_addr(gdma_wr_addr),
 .gdma_we(gdma_we),
 .gdma_happening(gdma_happening),
-.gdma_data(gdma_data),
 
 .vga_vs(VGA_VS),  //vga sync pulses
 .vga_hs(VGA_HS),

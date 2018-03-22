@@ -159,6 +159,16 @@ reg call;
 gb_alu alu (clock, alu_a, alu_b, alu_r, F[4], alu_op, alu_znhc);
 
 
+wire [7:0] zpage_data_out;
+
+
+
+gb_zpage zpage(addr_bus[6:0],
+	clock,
+	data_bus_out,
+	addr_bus[15:7] == 9'b111111111 ? cpu_we : 0,
+	zpage_data_out);
+
 //control wires to select registers for reading and writing
 `define REG_SEL_B 4'd0
 `define REG_SEL_C 4'd1
@@ -263,7 +273,7 @@ begin
 
 		16'b111111111xxxxxxx: begin //zero page
 			
-			cpu_data_in = addr_bus[7:0] == 8'hFF ? Reg_IE_ffff : data_bus_in;
+			cpu_data_in = addr_bus[7:0] == 8'hFF ? Reg_IE_ffff : zpage_data_out;
 		end
 		
 		16'b111111110xxxxxxx: begin //registers
@@ -374,7 +384,7 @@ begin
 			addr_bus = SP;
 			cpu_data_out = PC_minusone[7:0];
 			cpu_we = 1;
-		end else if (cycles == 16) begin
+		end else if (cycles == 17) begin
 			cpu_we = 0;
 		end else if (cycles == 8) begin
 			cpu_we = 0;
@@ -387,7 +397,7 @@ begin
 			addr_bus = 16'hff0f;
 			cpu_data_out = Reg_IF_ff0f & ~processedIRQ;
 			cpu_we = 1;
-		end else if (cycles == 4) begin
+		end else if (cycles == 5) begin
 			processedIRQ = 0;
 			cpu_we = 0;
 		end else if (cycles == 3) begin
@@ -1151,7 +1161,7 @@ begin
 					cpu_data_out = A;
 					cpu_we = 1;
 					re = 0;
-				end else if (cycles == 5) begin
+				end else if (cycles == 7) begin
 					cpu_we = 0;
 				end				
 			end
@@ -1178,7 +1188,7 @@ begin
 					addr_bus = {8'hFF, C};
 					cpu_data_out = A;
 					cpu_we = 1;
-				end else if (cycles == 6) begin
+				end else if (cycles == 7) begin
 					cpu_we = 0;
 				end 				
 			end	
@@ -1205,7 +1215,7 @@ begin
 					cpu_data_out = A;
 					addr_bus = addr_latch;
 					cpu_we = 1;
-				end else if (cycles == 6) begin
+				end else if (cycles == 7) begin
 					cpu_we = 0;
 				end
 			
@@ -1349,7 +1359,7 @@ begin
 				F[7:5] = alu_znhc[3:1];
 				addr_bus = {H,L};
 				cpu_we = 1;
-			end else if (cycles == 6) begin
+			end else if (cycles == 7) begin
 				cpu_we = 0;
 			end
 		end
@@ -1367,7 +1377,7 @@ begin
 				cpu_data_out  = cpu_data_in;
 				addr_bus = {H,L};
 				cpu_we = 1;
-			end else if (cycles == 6) begin
+			end else if (cycles == 7) begin
 				cpu_we = 0;
 			end 
 		end
@@ -1524,9 +1534,9 @@ begin
 		
 		8'h76: //halt
 		begin
-			cycles = cycles == 8'd0 ? 8'd4 : cycles;
+			cycles = cycles == 8'd0 ? (IME ? 8'd8: 8'd4) : cycles;
 			
-			if(cycles == 4) begin
+			if(cycles == (IME ? 8'd8: 8'd4)) begin
 				halt = IME | ~|valid_irqs;
 				halt_bug = |valid_irqs & ~IME;
 		
@@ -1619,7 +1629,7 @@ begin
 				end else begin
 					cycles = 4'd4;
 				end
-			end else if (cycles == 6) begin
+			end else if (cycles == 7) begin
 				cpu_we = 0;
 			end else if (cycles == 2) begin
 				extended_hl = 1'b0;

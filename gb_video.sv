@@ -303,7 +303,7 @@ reg [7:0] oam_wr_addr_bus;
 gb_oam oam(
 	memory_clock,
 	oam_data_in,
-	oam_addr_bus[7:0], oam_wr_addr_bus,
+	oam_addr_bus, oam_wr_addr_bus,
 	oam_we | dma_we,
 	oam_data_out);
 	
@@ -367,9 +367,9 @@ begin
 			end
 		endcase
 		
-		vram_data_out <= Reg_vbank_ff4f[0] & gbc ? vram2_data_out : vram1_data_out;
+		vram_data_out = (Reg_vbank_ff4f[0] & gbc) ? vram2_data_out : vram1_data_out;
 		
-		oam_data_in <= dma_happening ? dma_data : data_bus_in;
+		oam_data_in = dma_happening && (cpu_addr_bus[15:13] == 3'b100) ? vram_data_out : data_bus_in;
 		
 		
 		//todo: why is timer crap here!?
@@ -604,7 +604,7 @@ begin
 			lcy_zero_hack = 0;
 	end else begin
 	
-	if(LCD_power_cycle) begin
+	if(~Reg_LCDcontrol_ff40[7]) begin
 			render_mode = 2'b10;
 			pixel_x = 0;
 			pixel_y = 0;
@@ -613,7 +613,6 @@ begin
 			oam_bitplain1 = 0;
 			oam_fetch_state = 0;
 			in_window = 0;
-			LCD_power_cycle = 0;
 			lcy_zero_hack = 0;
 	end
 	
@@ -624,11 +623,7 @@ begin
 					7'h44: begin end // lcd y (read only)
 					7'h00: Reg_buttons_ff00[5:4] = data_bus_in[5:4];
 					7'h01: Reg_SB_ff01 = data_bus_in;
-					7'h40: begin
-							LCD_power_cycle =   ~data_bus_in[7];
-							Reg_LCDcontrol_ff40 = data_bus_in;
-							
-					end
+					7'h40: Reg_LCDcontrol_ff40 = data_bus_in;							
 					7'h41: Reg_LCDstatus_ff41[6:3] = data_bus_in[6:3];
 					7'h43: Reg_xscroll_ff43 = data_bus_in;
 					7'h45: Reg_lyc_ff45 = data_bus_in;
