@@ -10,13 +10,13 @@ Gameboy color features are 80% implemented.  However, clock speed doubling is no
 
 
 Remaining (besides refactoring)
-  Audio system still is buggy enough to label as "incomplete"
-  Color Gameboy clock doubling 
-  Extensive Gameboy Color debugging is still needed.
+   Audio system still is buggy enough to label as "incomplete"
+   Color Gameboy clock doubling 
+   Extensive Gameboy Color debugging is still needed.
   
- [video 1](https://www.youtube.com/watch?v=Pr7vuAg85WQ&t=10s)
+ [video 1](https://www.youtube.com/watch?v=uc7wt_IBnak)
  
- [video 2](https://www.youtube.com/watch?v=uc7wt_IBnak)
+ [video 2](https://www.youtube.com/watch?v=Pr7vuAg85WQ)
  
 This project was started a long time ago...and my coding style and abilities have changed quite a bit in that time...this does make things a bit inconsistant at times and I am slowly refactoring that.  
   
