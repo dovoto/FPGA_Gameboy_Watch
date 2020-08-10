@@ -1,17 +1,19 @@
 # FPGA_Gameboy_Watch
 Full gameboy and gameboy color Verilog Implenentation
 
-This project is at about 80% complete.  Most gameboy roms work, gameboy color features are 80% implemented.
+Gameboy core is complete with the exception of some Audio features not fully functioning (and bug fixing is, as always, on going). Most gameboy roms work as to most non audio test programs. 
+
+Gameboy color features are 80% implemented.  However, clock speed doubling is not implemented which renders most color games unplayable.
 
 
 ![overview](useful_docs/overview.jpg)
 
 
-Remaining (besides refactoring and checking in modules)
-  Debugging 
-  Gameboy color tile flips for background tiles
-  External ram support for larger than 256K roms (512k roms work but not enough internal bram from 512k rom AND gameboy color features)
-
+Remaining (besides refactoring)
+  Audio system still is buggy enough to label as "incomplete"
+  Color Gameboy clock doubling 
+  Extensive Gameboy Color debugging is still needed.
+  
  [video 1](https://www.youtube.com/watch?v=Pr7vuAg85WQ&t=10s)
  
  [video 2](https://www.youtube.com/watch?v=uc7wt_IBnak)
