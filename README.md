@@ -1,7 +1,7 @@
 # FPGA_Gameboy_Watch
 Full gameboy and gameboy color Verilog Implenentation
 
-Gameboy core is complete with the exception of some Audio features not fully functioning (and bug fixing is, as always, on going). Most gameboy roms work as to most non audio test programs. 
+Gameboy core is complete with the exception of some Audio features not fully functioning (and bug fixing is, as always, on going). Most gameboy roms work as do most non audio test programs. 
 
 Gameboy color features are 80% implemented.  However, clock speed doubling is not implemented which renders most color games unplayable.
 
